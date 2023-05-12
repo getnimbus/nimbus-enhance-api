@@ -6,6 +6,11 @@ services:
     ports:
       - '6379:6379'
     command: redis-server --save 20 1 --loglevel warning
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - cache:/data
   nimbus_enhance_api:
@@ -23,11 +28,14 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "50m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"
     environment:
       ENV: prod
       DEBUG: no
       MIGRATION: no
     env_file:
       - .env
+volumes:
+  cache:
+    driver: local
