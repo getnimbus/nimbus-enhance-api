@@ -1,4 +1,6 @@
-# Go Nimeth
+# Nimbus Enhance API
+
+Build for Nodereal Hackathon
 
 ## How to use
 
@@ -13,3 +15,9 @@ GORM_DSN=host=localhost port=5432 user=user password=password dbname=nimbus sslm
 ```
 
 3. Run executable file
+
+## References:
+
+https://encodeclub.notion.site/NodeReal-b0d916d076984eb5ad16818e0ddf327c
+
+https://dashboard.nodereal.io/my-apis

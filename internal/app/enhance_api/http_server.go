@@ -29,7 +29,7 @@ func NewHttpServer(
 
 	// add some checks on instance creation
 	h, _ := health.New(health.WithComponent(health.Component{
-		Name:    "enhance_api",
+		Name:    "nimbus_enhance_api",
 		Version: "v1.0",
 	}),
 	)
