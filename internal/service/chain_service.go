@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/tikivn/ultrago/u_logger"
+	"sync"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/tikivn/ultrago/u_logger"
+	"golang.org/x/sync/errgroup"
 
 	"go-nimeth/internal/infra"
 	"go-nimeth/internal/setting"
@@ -31,60 +33,63 @@ const (
 	Klaytn Chain = "klaytn"
 )
 
+// TODO: make this into env later
+var NODEREAL_API_KEY string = "5acc4f3c88f640b298c8444013d3bf43"
+
 // TODO: maybe need to add this to postgres database
 // TODO: some chains has strange method so maybe we need to customize the result a little bit
 var chainInfos = map[Chain]ChainInfo{
 	BSC: {
-		Endpoint: "https://bsc-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Endpoint: fmt.Sprintf("https://bsc-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	Ethereum: {
-		Endpoint: "https://eth-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Endpoint: fmt.Sprintf("https://eth-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	Polygon: {
-		Endpoint: "https://polygon-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Endpoint: fmt.Sprintf("https://polygon-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	Optimism: {
-		Endpoint: "https://opt-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Endpoint: fmt.Sprintf("https://opt-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	ArbitrumNova: {
-		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/arbitrum/",
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/arbitrum/", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	AvalanceC: {
-		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/avalanche-c/ext/bc/C/rpc",
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/avalanche-c/ext/bc/C/rpc", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	ArbitrumNitro: {
-		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/arbitrum-nitro/",
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/arbitrum-nitro/", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
 	},
 	Fantom: {
-		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/fantom/",
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/fantom/", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
@@ -102,6 +107,7 @@ type ChainService interface {
 }
 
 type chainService struct {
+	sync.RWMutex
 }
 
 func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (*types.Header, error) {
@@ -134,10 +140,13 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 		return nil, fmt.Errorf("missing tx hash")
 	}
 
-	var res = make(map[Chain]*types.Receipt, 0)
+	var (
+		eg, childCtx = errgroup.WithContext(ctx)
+		res          = make(map[Chain]*types.Receipt, 0)
+	)
 	for chain, chainInfo := range chainInfos {
-		err := func() error {
-			client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
+		eg.Go(func() error {
+			client, cleanup, err := infra.NewRpcClient(childCtx, chainInfo.Endpoint)
 			if err != nil {
 				logger.Errorf("failed to connect rpc client of chain %v", chain)
 				return nil
@@ -145,19 +154,21 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 			defer cleanup()
 
 			var r *types.Receipt
-			err = client.CallContext(ctx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
+			err = client.CallContext(childCtx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
 			if err == nil {
 				if r != nil {
+					svc.Lock()
 					res[chain] = r
+					svc.Unlock()
 				}
 			} else if err != nil {
 				logger.Errorf("failed to get transaction receipt in chain %v: %v", chain, err)
 			}
 			return nil
-		}()
-		if err != nil {
-			return nil, err
-		}
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 	return res, nil
 }
