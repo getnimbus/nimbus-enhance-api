@@ -7,10 +7,10 @@ import (
 	"github.com/tikivn/ultrago/u_time"
 	"gorm.io/gorm"
 
-	"go-nimeth/internal/entity"
-	"go-nimeth/internal/repo"
-	"go-nimeth/internal/repo/gorm_scope"
-	"go-nimeth/internal/setting"
+	"nimbus-enhance-api/internal/entity"
+	"nimbus-enhance-api/internal/repo"
+	"nimbus-enhance-api/internal/repo/gorm_scope"
+	"nimbus-enhance-api/internal/setting"
 )
 
 func NewDailyMetaRepo(

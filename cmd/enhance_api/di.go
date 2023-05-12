@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/wire"
 
-	"go-nimeth/internal/app/enhance_api"
+	"nimbus-enhance-api/internal/app/enhance_api"
 )
 
 func initApp(ctx context.Context) (enhance_api.App, func(), error) {

@@ -6,8 +6,8 @@ import (
 
 	"github.com/tikivn/ultrago/u_logger"
 
-	"go-nimeth/internal/conf"
-	"go-nimeth/internal/infra"
+	"nimbus-enhance-api/internal/conf"
+	"nimbus-enhance-api/internal/infra"
 )
 
 func RunMigration(ctx context.Context) error {

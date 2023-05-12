@@ -29,6 +29,10 @@ type config struct {
 	// db
 	Migration string `mapstructure:"MIGRATION" default:"no"`
 	GormDsn   string `mapstructure:"GORM_DSN" default:"-"`
+
+	// redis
+	RedisAddress string `mapstructure:"REDIS_ADDRESS" default:"localhost:6379"`
+	RedisDB      int    `mapstructure:"REDIS_DB" default:"0"`
 }
 
 func (c *config) IsLocal() bool {

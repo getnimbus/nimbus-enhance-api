@@ -2,12 +2,12 @@ package enhance_api
 
 import (
 	"github.com/google/wire"
-	"go-nimeth/internal/api"
 
-	"go-nimeth/internal/infra"
-	"go-nimeth/internal/repo/gorm"
-	"go-nimeth/internal/repo/gorm_scope"
-	"go-nimeth/internal/service"
+	"nimbus-enhance-api/internal/api"
+	"nimbus-enhance-api/internal/infra"
+	"nimbus-enhance-api/internal/repo/gorm"
+	"nimbus-enhance-api/internal/repo/gorm_scope"
+	"nimbus-enhance-api/internal/service"
 )
 
 var deps = wire.NewSet(
@@ -21,5 +21,6 @@ var deps = wire.NewSet(
 var GraphSet = wire.NewSet(
 	deps,
 	NewHttpServer,
+	NewCronjob,
 	NewApp,
 )

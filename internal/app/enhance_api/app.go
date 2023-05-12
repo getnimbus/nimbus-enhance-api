@@ -3,12 +3,13 @@ package enhance_api
 import (
 	"context"
 	"fmt"
-	"go-nimeth/internal/setting"
 	"net"
 
 	"github.com/tikivn/ultrago/u_graceful"
 	"github.com/tikivn/ultrago/u_logger"
 	"golang.org/x/sync/errgroup"
+
+	"nimbus-enhance-api/internal/setting"
 )
 
 func NewApp(

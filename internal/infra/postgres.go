@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"go-nimeth/internal/conf"
+	"nimbus-enhance-api/internal/conf"
 )
 
 func NewPostgresSession() (*gorm.DB, func(), error) {

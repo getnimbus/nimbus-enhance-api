@@ -6,4 +6,5 @@ import (
 
 var GraphSet = wire.NewSet(
 	NewPostgresSession,
+	NewRedisClient,
 )

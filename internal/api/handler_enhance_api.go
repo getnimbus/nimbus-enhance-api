@@ -8,7 +8,7 @@ import (
 	"github.com/tikivn/ultrago/u_handler"
 	"github.com/tikivn/ultrago/u_logger"
 
-	"go-nimeth/internal/service"
+	"nimbus-enhance-api/internal/service"
 )
 
 func NewEnhanceApiHandler(

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"go-nimeth/internal/repo/gorm"
 	"os"
 	"time"
 
@@ -11,8 +10,9 @@ import (
 	"github.com/tikivn/ultrago/u_logger"
 	"golang.org/x/sync/errgroup"
 
-	"go-nimeth/internal/conf"
-	"go-nimeth/pkg/mem_stats"
+	"nimbus-enhance-api/internal/conf"
+	"nimbus-enhance-api/internal/repo/gorm"
+	"nimbus-enhance-api/pkg/mem_stats"
 )
 
 func init() {

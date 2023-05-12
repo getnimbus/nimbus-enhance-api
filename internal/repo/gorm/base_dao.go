@@ -4,7 +4,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"go-nimeth/internal/entity"
+	"nimbus-enhance-api/internal/entity"
 )
 
 type BaseDao struct {

@@ -6,8 +6,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"go-nimeth/internal/repo"
-	"go-nimeth/internal/setting"
+	"nimbus-enhance-api/internal/repo"
+	"nimbus-enhance-api/internal/setting"
 )
 
 type contextKey string

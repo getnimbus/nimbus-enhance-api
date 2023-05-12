@@ -7,7 +7,7 @@ import (
 	"github.com/smartystreets/goconvey/convey"
 	"github.com/tikivn/ultrago/u_time"
 
-	"go-nimeth/internal/setting"
+	"nimbus-enhance-api/internal/setting"
 )
 
 func TestDailyMetaEntity(t *testing.T) {

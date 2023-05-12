@@ -5,8 +5,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"go-nimeth/internal/entity"
-	"go-nimeth/internal/repo/gorm_scope"
+	"nimbus-enhance-api/internal/entity"
+	"nimbus-enhance-api/internal/repo/gorm_scope"
 )
 
 type DailyMetaRepo interface {

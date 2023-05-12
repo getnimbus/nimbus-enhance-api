@@ -3,10 +3,10 @@ package entity
 import (
 	"fmt"
 
-	"go-nimeth/internal/setting"
-
 	"github.com/tikivn/ultrago/u_time"
 	"github.com/tikivn/ultrago/u_validator"
+
+	"nimbus-enhance-api/internal/setting"
 )
 
 type DailyMetaStatus int

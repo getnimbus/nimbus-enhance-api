@@ -10,8 +10,8 @@ import (
 	"github.com/tikivn/ultrago/u_logger"
 	"golang.org/x/sync/errgroup"
 
-	"go-nimeth/internal/infra"
-	"go-nimeth/internal/setting"
+	"nimbus-enhance-api/internal/infra"
+	"nimbus-enhance-api/internal/setting"
 )
 
 type Chain string
