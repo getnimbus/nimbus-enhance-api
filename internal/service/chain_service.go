@@ -11,6 +11,7 @@ import (
 	nearclient "github.com/eteu-technologies/near-api-go/pkg/client"
 	"github.com/eteu-technologies/near-api-go/pkg/client/block"
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/portto/solana-go-sdk/client"
@@ -294,8 +295,8 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				defer cleanup()
 
 				var data = struct {
-					Receipt *types.Receipt     `json:"receipt"`
-					Tx      *types.Transaction `json:"tx"`
+					Receipt *types.Receipt  `json:"receipt"`
+					Tx      *rpcTransaction `json:"tx"`
 				}{}
 				err = client.CallContext(childCtx, &data.Receipt, chainInfo.Methods["getTransactionReceipt"], hash)
 				if err != nil {
@@ -334,7 +335,7 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 			}
 			return nil
 		})
-	} else {
+	} else if len(hash) >= 42 {
 		chainInfo := chainInfos[Near]
 		eg.Go(func() error {
 			client, cleanup, err := infra.NewRpcClient(childCtx, chainInfo.Endpoint)
@@ -344,14 +345,18 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 			}
 			defer cleanup()
 
-			// TODO: workaround here
-			// think about make same interface for this type
+			// TODO: think about make same interface for this type
 			var r interface{}
 			err = client.CallContext(childCtx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
 			if err != nil && err.(rpc.DataError).ErrorData() != nil {
-				svc.Lock()
-				res[Near] = err.(rpc.DataError).ErrorData()
-				svc.Unlock()
+				switch err.(rpc.DataError).ErrorData().(type) {
+				case string:
+					logger.Errorf("failed to get transaction receipt in chain near: %v", err)
+				default:
+					svc.Lock()
+					res[Near] = err.(rpc.DataError).ErrorData()
+					svc.Unlock()
+				}
 			}
 			return nil
 		})
@@ -379,4 +384,22 @@ type JsonError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+}
+
+type rpcTransaction struct {
+	tx *types.Transaction
+	txExtraInfo
+}
+
+type txExtraInfo struct {
+	BlockNumber *string         `json:"blockNumber,omitempty"`
+	BlockHash   *common.Hash    `json:"blockHash,omitempty"`
+	From        *common.Address `json:"from,omitempty"`
+}
+
+func (tx *rpcTransaction) UnmarshalJSON(msg []byte) error {
+	if err := json.Unmarshal(msg, &tx.tx); err != nil {
+		return err
+	}
+	return json.Unmarshal(msg, &tx.txExtraInfo)
 }
