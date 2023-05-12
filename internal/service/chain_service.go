@@ -295,8 +295,9 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				defer cleanup()
 
 				var data = struct {
-					Receipt *types.Receipt  `json:"receipt"`
-					Tx      *rpcTransaction `json:"tx"`
+					Receipt *types.Receipt     `json:"receipt"`
+					Tx      *types.Transaction `json:"tx"`
+					Extra   txExtraInfo        `json:"extra"`
 				}{}
 				err = client.CallContext(childCtx, &data.Receipt, chainInfo.Methods["getTransactionReceipt"], hash)
 				if err != nil {
@@ -305,13 +306,20 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				}
 
 				if data.Receipt != nil {
-					err = client.CallContext(childCtx, &data.Tx, chainInfo.Methods["getTransactionByHash"], data.Receipt.TxHash)
+					var tx *rpcTransaction
+					err = client.CallContext(childCtx, &tx, chainInfo.Methods["getTransactionByHash"], data.Receipt.TxHash)
 					if err != nil {
 						logger.Errorf("failed to get transaction in chain %v: %v", chain, err)
 						return nil
 					}
+					if tx != nil {
+						data.Tx = tx.tx
+						data.Extra.BlockNumber = tx.BlockNumber
+						data.Extra.BlockHash = tx.BlockHash
+						data.Extra.From = tx.From
+					}
 				}
-				if data.Receipt != nil && data.Tx != nil {
+				if data.Receipt != nil {
 					svc.Lock()
 					res[chain] = data
 					svc.Unlock()
