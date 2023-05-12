@@ -1,6 +1,6 @@
 version: '3.8'
 services:
-  token_tracker:
+  nimbus_enhance_api:
     container_name: nimbus_enhance_api
     build:
       context: .

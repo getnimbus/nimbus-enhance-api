@@ -22,7 +22,7 @@ RUN make di static
 
 
 ######## Start a new stage from scratch #######
-FROM alpine:3.13
+FROM alpine:3.13 as production
 
 RUN apk --no-cache add ca-certificates tzdata htop tini bash curl
 
@@ -33,10 +33,7 @@ ENV TZ=UTC
 RUN cp /usr/share/zoneinfo/UTC /etc/localtime
 
 # Copy the Pre-built binary file from the previous stage
-COPY --from=builder /src/out/cli /bin/
-COPY --from=builder /src/out/master /bin/
-COPY --from=builder /src/out/worker /bin/
-COPY --from=builder /src/out/price_service /bin/
+COPY --from=builder /src/out/enhance_api /bin/
 
 # Copy resources file
 # COPY --from=builder /src/docs /docs/
