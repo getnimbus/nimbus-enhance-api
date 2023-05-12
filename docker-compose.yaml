@@ -6,6 +6,8 @@ services:
       context: .
       target: production
     image: nimbus_enhance_api
+    ports:
+      - "8081:8081"
     restart: always
     command: "tini -- /bin/enhance_api"
     logging:
