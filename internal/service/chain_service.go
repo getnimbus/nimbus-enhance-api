@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	nearclient "github.com/eteu-technologies/near-api-go/pkg/client"
 	"github.com/eteu-technologies/near-api-go/pkg/client/block"
@@ -17,6 +19,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"nimbus-enhance-api/internal/infra"
+	"nimbus-enhance-api/internal/repo"
+	"nimbus-enhance-api/internal/repo/redis"
 	"nimbus-enhance-api/internal/setting"
 	"nimbus-enhance-api/pkg/encoder"
 )
@@ -51,6 +55,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -59,6 +64,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -67,6 +73,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -75,6 +82,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -83,6 +91,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -91,6 +100,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -99,6 +109,7 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
@@ -107,15 +118,15 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
+			"getTransactionByHash":  "eth_getTransactionByHash",
 		},
 		IsEVM: true,
 	},
 	Solana: {
 		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/solana/", NODEREAL_API_KEY),
 		Methods: map[string]string{
-			"getBlockHeight":        "getBlockHeight",
-			"getBlockByNumber":      "getBlock",
-			"getTransactionReceipt": "",
+			"getBlockHeight":   "getBlockHeight",
+			"getBlockByNumber": "getBlock",
 		},
 		IsEVM: false,
 	},
@@ -137,8 +148,12 @@ var chainInfos = map[Chain]ChainInfo{
 	},
 }
 
-func NewChainService() ChainService {
-	return &chainService{}
+func NewChainService(
+	redisClient *infra.RedisClient,
+) ChainService {
+	return &chainService{
+		redisRepo: redis.NewRedisRepo(redisClient, "chain", time.Minute),
+	}
 }
 
 type ChainService interface {
@@ -148,6 +163,7 @@ type ChainService interface {
 
 type chainService struct {
 	sync.RWMutex
+	redisRepo repo.RedisRepo
 }
 
 func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (interface{}, error) {
@@ -159,6 +175,15 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		return nil, setting.ErrNotSupportedChain
 	}
 
+	// get data from cache
+	data, err := svc.redisRepo.Get(ctx, string(chain))
+	if err == nil {
+		var res interface{}
+		err = json.Unmarshal([]byte(data), &res)
+		return res, err
+	}
+
+	// if no hit cache then call api
 	if chainInfo.IsEVM {
 		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
 		if err != nil {
@@ -166,12 +191,15 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		}
 		defer cleanup()
 
-		var head *types.Header
-		err = client.CallContext(ctx, &head, chainInfo.Methods["getBlockByNumber"], "latest", false)
-		if err == nil && head == nil {
+		var res *types.Header
+		err = client.CallContext(ctx, &res, chainInfo.Methods["getBlockByNumber"], "latest", false)
+		if err != nil {
+			return nil, err
+		} else if err == nil && res == nil {
 			err = ethereum.NotFound
 		}
-		return head, err
+		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		return res, nil
 	} else if chain == Solana {
 		client := client.NewClient(chainInfo.Endpoint)
 		latestBlockNumber, err := client.GetSlot(ctx)
@@ -183,7 +211,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 			maxSupportedTransactionVersion uint8 = 0
 			rewards                              = false
 		)
-		return client.GetBlockWithConfig(
+		res, err := client.GetBlockWithConfig(
 			ctx,
 			latestBlockNumber,
 			solanarpc.GetBlockConfig{
@@ -193,12 +221,22 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 				Rewards:                        &rewards,
 			},
 		)
+		if err != nil {
+			return nil, err
+		}
+		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		return res, nil
 	} else if chain == Near {
 		client, err := nearclient.NewClient(chainInfo.Endpoint)
 		if err != nil {
 			return nil, setting.ErrClientConnectionFailure
 		}
-		return client.BlockDetails(ctx, block.FinalityFinal())
+		res, err := client.BlockDetails(ctx, block.FinalityFinal())
+		if err != nil {
+			return nil, err
+		}
+		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		return res, nil
 	} else { // default
 		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
 		if err != nil {
@@ -206,12 +244,15 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		}
 		defer cleanup()
 
-		var head interface{}
-		err = client.CallContext(ctx, &head, chainInfo.Methods["getBlockByNumber"], "latest", false)
-		if err == nil && head == nil {
+		var res interface{}
+		err = client.CallContext(ctx, &res, chainInfo.Methods["getBlockByNumber"], "latest", false)
+		if err != nil {
+			return nil, err
+		} else if err == nil && res == nil {
 			err = ethereum.NotFound
 		}
-		return head, err
+		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		return res, nil
 	}
 }
 
@@ -219,6 +260,14 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 	ctx, logger := u_logger.GetLogger(ctx)
 	if hash == "" {
 		return nil, fmt.Errorf("missing tx hash")
+	}
+
+	// get data from cache
+	data, err := svc.redisRepo.Get(ctx, hash)
+	if err == nil {
+		var res map[Chain]interface{}
+		err = json.Unmarshal([]byte(data), &res)
+		return res, err
 	}
 
 	var (
@@ -244,16 +293,27 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				}
 				defer cleanup()
 
-				var r *types.Receipt
-				err = client.CallContext(childCtx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
-				if err == nil {
-					if r != nil {
-						svc.Lock()
-						res[chain] = r
-						svc.Unlock()
-					}
-				} else if err != nil {
+				var data = struct {
+					Receipt *types.Receipt     `json:"receipt"`
+					Tx      *types.Transaction `json:"tx"`
+				}{}
+				err = client.CallContext(childCtx, &data.Receipt, chainInfo.Methods["getTransactionReceipt"], hash)
+				if err != nil {
 					logger.Errorf("failed to get transaction receipt in chain %v: %v", chain, err)
+					return nil
+				}
+
+				if data.Receipt != nil {
+					err = client.CallContext(childCtx, &data.Tx, chainInfo.Methods["getTransactionByHash"], data.Receipt.TxHash)
+					if err != nil {
+						logger.Errorf("failed to get transaction in chain %v: %v", chain, err)
+						return nil
+					}
+				}
+				if data.Receipt != nil && data.Tx != nil {
+					svc.Lock()
+					res[chain] = data
+					svc.Unlock()
 				}
 				return nil
 			})
@@ -299,6 +359,8 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	_ = svc.redisRepo.Set(ctx, hash, res)
+	_ = svc.redisRepo.Expire(ctx, hash, 30*time.Minute)
 	return res, nil
 }
 

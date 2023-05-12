@@ -1,11 +1,21 @@
 version: '3.8'
 services:
+  cache:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server --save 20 1 --loglevel warning
+    volumes:
+      - cache:/data
   nimbus_enhance_api:
     container_name: nimbus_enhance_api
     build:
       context: .
       target: production
     image: nimbus_enhance_api
+    depends_on:
+      - cache
     ports:
       - "8081:8081"
     restart: always
