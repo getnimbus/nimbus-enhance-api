@@ -107,19 +107,18 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 		err := func() error {
 			client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
 			if err != nil {
-				return setting.ErrClientConnectionFailure
+				return nil
 			}
 			defer cleanup()
 
 			var r *types.Receipt
 			err = client.CallContext(ctx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
 			if err == nil {
-				if r == nil {
-					return ethereum.NotFound
+				if r != nil {
+					res[chain] = r
 				}
-				res[chain] = r
 			}
-			return err
+			return nil
 		}()
 		if err != nil {
 			return nil, err
