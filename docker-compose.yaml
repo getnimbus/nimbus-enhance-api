@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  token_tracker:
+    container_name: nimbus_enhance_api
+    build:
+      context: .
+      target: production
+    image: nimbus_enhance_api
+    restart: always
+    command: "tini -- /bin/enhance_api"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    environment:
+      ENV: prod
+      DEBUG: no
+      MIGRATION: no
+    env_file:
+      - .env

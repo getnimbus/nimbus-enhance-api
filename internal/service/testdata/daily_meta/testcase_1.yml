@@ -1,0 +1,9 @@
+daily_meta:
+  - id: 488c590e-c681-4e07-a4f5-8e8c7f7e81fb
+    created_at: 1670814545000
+    updated_at: 1670814545000
+    coin_name: ETH
+    date: 2022-12-23
+    from: 1001
+    to: 2000
+    status: 3
