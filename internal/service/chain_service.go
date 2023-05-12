@@ -3,20 +3,28 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
+	nearclient "github.com/eteu-technologies/near-api-go/pkg/client"
+	"github.com/eteu-technologies/near-api-go/pkg/client/block"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/portto/solana-go-sdk/client"
+	solanarpc "github.com/portto/solana-go-sdk/rpc"
 	"github.com/tikivn/ultrago/u_logger"
 	"golang.org/x/sync/errgroup"
 
 	"nimbus-enhance-api/internal/infra"
 	"nimbus-enhance-api/internal/setting"
+	"nimbus-enhance-api/pkg/encoder"
 )
 
 type Chain string
 
 const (
+	// EVM chain
 	BSC           Chain = "bsc"
 	Ethereum      Chain = "ethereum"
 	Polygon       Chain = "polygon"
@@ -26,9 +34,8 @@ const (
 	ArbitrumNitro Chain = "arbitrum-nitro"
 	Fantom        Chain = "fantom"
 
-	// not supported yet
+	// non EVM chain
 	Solana Chain = "solana"
-	Aptos  Chain = "aptos"
 	Near   Chain = "near"
 	Klaytn Chain = "klaytn"
 )
@@ -45,6 +52,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	Ethereum: {
 		Endpoint: fmt.Sprintf("https://eth-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
@@ -52,6 +60,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	Polygon: {
 		Endpoint: fmt.Sprintf("https://polygon-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
@@ -59,6 +68,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	Optimism: {
 		Endpoint: fmt.Sprintf("https://opt-mainnet.nodereal.io/v1/%s", NODEREAL_API_KEY),
@@ -66,6 +76,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	ArbitrumNova: {
 		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/arbitrum/", NODEREAL_API_KEY),
@@ -73,6 +84,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	AvalanceC: {
 		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/avalanche-c/ext/bc/C/rpc", NODEREAL_API_KEY),
@@ -80,6 +92,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	ArbitrumNitro: {
 		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/arbitrum-nitro/", NODEREAL_API_KEY),
@@ -87,6 +100,7 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
 	},
 	Fantom: {
 		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/fantom/", NODEREAL_API_KEY),
@@ -94,6 +108,32 @@ var chainInfos = map[Chain]ChainInfo{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
 		},
+		IsEVM: true,
+	},
+	Solana: {
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/solana/", NODEREAL_API_KEY),
+		Methods: map[string]string{
+			"getBlockHeight":        "getBlockHeight",
+			"getBlockByNumber":      "getBlock",
+			"getTransactionReceipt": "",
+		},
+		IsEVM: false,
+	},
+	Near: {
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/near/", NODEREAL_API_KEY),
+		Methods: map[string]string{
+			"getBlockByNumber":      "block",
+			"getTransactionReceipt": "EXPERIMENTAL_receipt",
+		},
+		IsEVM: false,
+	},
+	Klaytn: {
+		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/klaytn/", NODEREAL_API_KEY),
+		Methods: map[string]string{
+			"getBlockByNumber":      "klay_getBlockByNumber",
+			"getTransactionReceipt": "klay_getTransactionReceipt",
+		},
+		IsEVM: false,
 	},
 }
 
@@ -102,39 +142,80 @@ func NewChainService() ChainService {
 }
 
 type ChainService interface {
-	GetLatestBlock(ctx context.Context, chain Chain) (*types.Header, error)
-	SearchTransactionHash(ctx context.Context, hash string) (map[Chain]*types.Receipt, error)
+	GetLatestBlock(ctx context.Context, chain Chain) (interface{}, error)
+	SearchTransactionHash(ctx context.Context, hash string) (map[Chain]interface{}, error)
 }
 
 type chainService struct {
 	sync.RWMutex
 }
 
-func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (*types.Header, error) {
+func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (interface{}, error) {
 	if chain == "" {
 		return nil, fmt.Errorf("missing chain")
 	}
-
 	chainInfo, ok := svc.getChain(chain)
 	if !ok {
 		return nil, setting.ErrNotSupportedChain
 	}
 
-	client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
-	if err != nil {
-		return nil, setting.ErrClientConnectionFailure
-	}
-	defer cleanup()
+	if chainInfo.IsEVM {
+		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
+		if err != nil {
+			return nil, setting.ErrClientConnectionFailure
+		}
+		defer cleanup()
 
-	var head *types.Header
-	err = client.CallContext(ctx, &head, chainInfo.Methods["getBlockByNumber"], "latest", false)
-	if err == nil && head == nil {
-		err = ethereum.NotFound
+		var head *types.Header
+		err = client.CallContext(ctx, &head, chainInfo.Methods["getBlockByNumber"], "latest", false)
+		if err == nil && head == nil {
+			err = ethereum.NotFound
+		}
+		return head, err
+	} else if chain == Solana {
+		client := client.NewClient(chainInfo.Endpoint)
+		latestBlockNumber, err := client.GetSlot(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		var (
+			maxSupportedTransactionVersion uint8 = 0
+			rewards                              = false
+		)
+		return client.GetBlockWithConfig(
+			ctx,
+			latestBlockNumber,
+			solanarpc.GetBlockConfig{
+				Encoding:                       solanarpc.GetBlockConfigEncodingBase64,
+				TransactionDetails:             solanarpc.GetBlockConfigTransactionDetailsNone,
+				MaxSupportedTransactionVersion: &maxSupportedTransactionVersion,
+				Rewards:                        &rewards,
+			},
+		)
+	} else if chain == Near {
+		client, err := nearclient.NewClient(chainInfo.Endpoint)
+		if err != nil {
+			return nil, setting.ErrClientConnectionFailure
+		}
+		return client.BlockDetails(ctx, block.FinalityFinal())
+	} else { // default
+		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
+		if err != nil {
+			return nil, setting.ErrClientConnectionFailure
+		}
+		defer cleanup()
+
+		var head interface{}
+		err = client.CallContext(ctx, &head, chainInfo.Methods["getBlockByNumber"], "latest", false)
+		if err == nil && head == nil {
+			err = ethereum.NotFound
+		}
+		return head, err
 	}
-	return head, err
 }
 
-func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string) (map[Chain]*types.Receipt, error) {
+func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string) (map[Chain]interface{}, error) {
 	ctx, logger := u_logger.GetLogger(ctx)
 	if hash == "" {
 		return nil, fmt.Errorf("missing tx hash")
@@ -142,29 +223,75 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 
 	var (
 		eg, childCtx = errgroup.WithContext(ctx)
-		res          = make(map[Chain]*types.Receipt, 0)
+		res          = make(map[Chain]interface{}, 0)
 	)
-	for k, v := range chainInfos {
-		chain := k
-		chainInfo := v
+
+	// chain deploy EVM always has fixed-length 66 in tx hash
+	// https://stackoverflow.com/questions/72772567/how-long-ethereum-hash-length-block-transaction-address
+	if strings.HasPrefix(hash, "0x") && len(hash) == 66 {
+		for k, v := range chainInfos {
+			if !v.IsEVM {
+				continue
+			}
+
+			chain := k
+			chainInfo := v
+			eg.Go(func() error {
+				client, cleanup, err := infra.NewRpcClient(childCtx, chainInfo.Endpoint)
+				if err != nil {
+					logger.Errorf("failed to connect rpc client of chain %v: %v", chain, err)
+					return nil
+				}
+				defer cleanup()
+
+				var r *types.Receipt
+				err = client.CallContext(childCtx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
+				if err == nil {
+					if r != nil {
+						svc.Lock()
+						res[chain] = r
+						svc.Unlock()
+					}
+				} else if err != nil {
+					logger.Errorf("failed to get transaction receipt in chain %v: %v", chain, err)
+				}
+				return nil
+			})
+		}
+	} else if encoder.IsBase58(hash) && len(hash) == 88 {
+		eg.Go(func() error {
+			chainInfo := chainInfos[Solana]
+			client := client.NewClient(chainInfo.Endpoint)
+			r, err := client.GetTransaction(ctx, hash)
+			if err == nil {
+				if r != nil {
+					svc.Lock()
+					res[Solana] = r
+					svc.Unlock()
+				}
+			} else if err != nil {
+				logger.Errorf("failed to get transaction receipt in chain solana: %v", err)
+			}
+			return nil
+		})
+	} else {
+		chainInfo := chainInfos[Near]
 		eg.Go(func() error {
 			client, cleanup, err := infra.NewRpcClient(childCtx, chainInfo.Endpoint)
 			if err != nil {
-				logger.Errorf("failed to connect rpc client of chain %v", chain)
+				logger.Errorf("failed to connect rpc client of chain %v: %v", Near, err)
 				return nil
 			}
 			defer cleanup()
 
-			var r *types.Receipt
+			// TODO: workaround here
+			// think about make same interface for this type
+			var r interface{}
 			err = client.CallContext(childCtx, &r, chainInfo.Methods["getTransactionReceipt"], hash)
-			if err == nil {
-				if r != nil {
-					svc.Lock()
-					res[chain] = r
-					svc.Unlock()
-				}
-			} else if err != nil {
-				logger.Errorf("failed to get transaction receipt in chain %v: %v", chain, err)
+			if err != nil && err.(rpc.DataError).ErrorData() != nil {
+				svc.Lock()
+				res[Near] = err.(rpc.DataError).ErrorData()
+				svc.Unlock()
 			}
 			return nil
 		})
@@ -183,4 +310,11 @@ func (svc *chainService) getChain(chain Chain) (ChainInfo, bool) {
 type ChainInfo struct {
 	Endpoint string            `json:"endpoint"`
 	Methods  map[string]string `json:"methods"`
+	IsEVM    bool              `json:"is_evm"`
+}
+
+type JsonError struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
 }

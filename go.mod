@@ -5,13 +5,19 @@ go 1.20
 require (
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/creasty/defaults v1.6.0
+	github.com/eteu-technologies/near-api-go v0.0.1
 	github.com/ethereum/go-ethereum v1.10.26
 	github.com/go-chi/chi/v5 v5.0.8
+	github.com/go-co-op/gocron v1.27.0
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.3.0
 	github.com/google/wire v0.5.0
 	github.com/hedzr/lb v0.3.1
 	github.com/hellofresh/health-go/v5 v5.1.1
 	github.com/hlts2/round-robin v0.0.0-20211119053418-5ea74e1f7bfc
+	github.com/mr-tron/base58 v1.2.0
+	github.com/portto/solana-go-sdk v1.23.0
+	github.com/samber/lo v1.38.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/spf13/viper v1.14.0
@@ -22,22 +28,23 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.0.0-rc.1 // indirect
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deckarep/golang-set v1.8.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/eteu-technologies/borsh-go v0.3.2 // indirect
+	github.com/eteu-technologies/golang-uint128 v1.1.2-eteu // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/go-co-op/gocron v1.27.0 // indirect
 	github.com/go-ole/go-ole v1.2.1 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.9.0 // indirect
-	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
-	github.com/golang-module/carbon/v2 v2.2.3 // indirect
 	github.com/google/subcommands v1.0.1 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
@@ -64,13 +71,13 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.3 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
-	github.com/samber/lo v1.38.1 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 	github.com/spf13/afero v1.9.3 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/stretchr/testify v1.8.2 // indirect
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
