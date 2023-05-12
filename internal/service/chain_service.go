@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/tikivn/ultrago/u_logger"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -14,23 +15,25 @@ import (
 type Chain string
 
 const (
-	AvalanceC     Chain = "avalanche-c"
 	BSC           Chain = "bsc"
 	Ethereum      Chain = "ethereum"
+	Polygon       Chain = "polygon"
+	Optimism      Chain = "optimism"
+	ArbitrumNova  Chain = "arbitrum"
+	AvalanceC     Chain = "avalanche-c"
 	ArbitrumNitro Chain = "arbitrum-nitro"
 	Fantom        Chain = "fantom"
+
+	// not supported yet
+	Solana Chain = "solana"
+	Aptos  Chain = "aptos"
+	Near   Chain = "near"
+	Klaytn Chain = "klaytn"
 )
 
 // TODO: maybe need to add this to postgres database
 // TODO: some chains has strange method so maybe we need to customize the result a little bit
 var chainInfos = map[Chain]ChainInfo{
-	AvalanceC: {
-		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/avalanche-c/ext/bc/C/rpc",
-		Methods: map[string]string{
-			"getBlockByNumber":      "eth_getBlockByNumber",
-			"getTransactionReceipt": "eth_getTransactionReceipt",
-		},
-	},
 	BSC: {
 		Endpoint: "https://bsc-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
 		Methods: map[string]string{
@@ -40,6 +43,34 @@ var chainInfos = map[Chain]ChainInfo{
 	},
 	Ethereum: {
 		Endpoint: "https://eth-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Methods: map[string]string{
+			"getBlockByNumber":      "eth_getBlockByNumber",
+			"getTransactionReceipt": "eth_getTransactionReceipt",
+		},
+	},
+	Polygon: {
+		Endpoint: "https://polygon-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Methods: map[string]string{
+			"getBlockByNumber":      "eth_getBlockByNumber",
+			"getTransactionReceipt": "eth_getTransactionReceipt",
+		},
+	},
+	Optimism: {
+		Endpoint: "https://opt-mainnet.nodereal.io/v1/5acc4f3c88f640b298c8444013d3bf43",
+		Methods: map[string]string{
+			"getBlockByNumber":      "eth_getBlockByNumber",
+			"getTransactionReceipt": "eth_getTransactionReceipt",
+		},
+	},
+	ArbitrumNova: {
+		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/arbitrum/",
+		Methods: map[string]string{
+			"getBlockByNumber":      "eth_getBlockByNumber",
+			"getTransactionReceipt": "eth_getTransactionReceipt",
+		},
+	},
+	AvalanceC: {
+		Endpoint: "https://open-platform.nodereal.io/5acc4f3c88f640b298c8444013d3bf43/avalanche-c/ext/bc/C/rpc",
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
 			"getTransactionReceipt": "eth_getTransactionReceipt",
@@ -98,6 +129,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (*type
 }
 
 func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string) (map[Chain]*types.Receipt, error) {
+	ctx, logger := u_logger.GetLogger(ctx)
 	if hash == "" {
 		return nil, fmt.Errorf("missing tx hash")
 	}
@@ -107,6 +139,7 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 		err := func() error {
 			client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
 			if err != nil {
+				logger.Errorf("failed to connect rpc client of chain %v", chain)
 				return nil
 			}
 			defer cleanup()
@@ -117,6 +150,8 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				if r != nil {
 					res[chain] = r
 				}
+			} else if err != nil {
+				logger.Errorf("failed to get transaction receipt in chain %v: %v", chain, err)
 			}
 			return nil
 		}()
