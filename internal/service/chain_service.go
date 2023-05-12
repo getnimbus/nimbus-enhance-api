@@ -144,7 +144,9 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 		eg, childCtx = errgroup.WithContext(ctx)
 		res          = make(map[Chain]*types.Receipt, 0)
 	)
-	for chain, chainInfo := range chainInfos {
+	for k, v := range chainInfos {
+		chain := k
+		chainInfo := v
 		eg.Go(func() error {
 			client, cleanup, err := infra.NewRpcClient(childCtx, chainInfo.Endpoint)
 			if err != nil {
