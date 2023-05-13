@@ -71,6 +71,10 @@ func (h *EnhanceApiHandler) handlerSearchTxHash(w http.ResponseWriter, r *http.R
 		logger.Errorf("failed to get tx hash %s: %v", hash, err)
 		h.Internal(w, r, fmt.Errorf("failed to get tx hash %s: %v", hash, err))
 		return
+	} else if len(res) == 0 {
+		logger.Errorf("not found tx hash %s", hash)
+		h.NotFound(w, r, fmt.Errorf("not found tx hash %s", hash))
+		return
 	}
 	h.Success(w, r, res)
 }

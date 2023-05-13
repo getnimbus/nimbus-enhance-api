@@ -331,6 +331,7 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 		eg.Go(func() error {
 			chainInfo := chainInfos[Solana]
 			client := client.NewClient(chainInfo.Endpoint)
+
 			r, err := client.GetTransaction(ctx, hash)
 			if err == nil {
 				if r != nil {
@@ -343,9 +344,9 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 			}
 			return nil
 		})
-	} else if len(hash) >= 42 {
-		chainInfo := chainInfos[Near]
+	} else if len(hash) >= 42 && len(hash) <= 44 {
 		eg.Go(func() error {
+			chainInfo := chainInfos[Near]
 			client, cleanup, err := infra.NewRpcClient(childCtx, chainInfo.Endpoint)
 			if err != nil {
 				logger.Errorf("failed to connect rpc client of chain %v: %v", Near, err)
@@ -369,9 +370,13 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 			return nil
 		})
 	}
+
+	// wait for goroutine
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+
+	// cache result into redis
 	_ = svc.redisRepo.Set(ctx, hash, res)
 	_ = svc.redisRepo.Expire(ctx, hash, 30*time.Minute)
 	return res, nil
