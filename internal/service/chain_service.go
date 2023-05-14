@@ -354,7 +354,7 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				return nil
 			})
 		}
-	} else if encoder.IsBase58(hash) && len(hash) == 88 {
+	} else if (len(hash) >= 86 && len(hash) <= 88) && encoder.IsBase58(hash) {
 		eg.Go(func() error {
 			chainInfo := chainInfos[Solana]
 			client := client.NewClient(chainInfo.Endpoint)
