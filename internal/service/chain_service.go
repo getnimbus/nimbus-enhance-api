@@ -195,23 +195,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 	}
 
 	// if no hit cache then call api
-	if chainInfo.IsEVM {
-		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
-		if err != nil {
-			return nil, setting.ErrClientConnectionFailure
-		}
-		defer cleanup()
-
-		var res *types.Header
-		err = client.CallContext(ctx, &res, chainInfo.Methods["getBlockByNumber"], "latest", false)
-		if err != nil {
-			return nil, err
-		} else if err == nil && res == nil {
-			err = ethereum.NotFound
-		}
-		_ = svc.redisRepo.Set(ctx, cacheKey, res)
-		return res, nil
-	} else if chain == Solana {
+	if chain == Solana {
 		client := client.NewClient(chainInfo.Endpoint)
 		latestBlockNumber, err := client.GetSlot(ctx)
 		if err != nil {
@@ -248,7 +232,39 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		}
 		_ = svc.redisRepo.Set(ctx, cacheKey, res)
 		return res, nil
-	} else { // default
+	} else if chain == Klaytn {
+		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
+		if err != nil {
+			return nil, setting.ErrClientConnectionFailure
+		}
+		defer cleanup()
+
+		var res interface{}
+		err = client.CallContext(ctx, &res, chainInfo.Methods["getBlockByNumber"], "latest", false)
+		if err != nil {
+			return nil, err
+		} else if err == nil && res == nil {
+			err = ethereum.NotFound
+		}
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
+		return res, nil
+	} else if chainInfo.IsEVM {
+		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
+		if err != nil {
+			return nil, setting.ErrClientConnectionFailure
+		}
+		defer cleanup()
+
+		var res *types.Header
+		err = client.CallContext(ctx, &res, chainInfo.Methods["getBlockByNumber"], "latest", false)
+		if err != nil {
+			return nil, err
+		} else if err == nil && res == nil {
+			err = ethereum.NotFound
+		}
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
+		return res, nil
+	} else { // other non EVM chain
 		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
 		if err != nil {
 			return nil, setting.ErrClientConnectionFailure
