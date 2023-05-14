@@ -28,12 +28,13 @@ type EnhanceApiHandler struct {
 
 func (h *EnhanceApiHandler) Route() chi.Router {
 	mux := chi.NewRouter()
-	mux.Get("/blocks/latest/{chain}", h.handlerGetLatestBlock)
+	mux.Get("/blocks/latest/{chain}", h.handlerGetLatestBlockByChain)
+	mux.Get("/tx/total/{chain}", h.handlerCountTotalTxByChain)
 	mux.Get("/tx/{hash}", h.handlerSearchTxHash)
 	return mux
 }
 
-func (h *EnhanceApiHandler) handlerGetLatestBlock(w http.ResponseWriter, r *http.Request) {
+func (h *EnhanceApiHandler) handlerGetLatestBlockByChain(w http.ResponseWriter, r *http.Request) {
 	var (
 		ctx, logger = u_logger.GetLogger(r.Context())
 		chain       = chi.URLParam(r, "chain")
@@ -48,6 +49,38 @@ func (h *EnhanceApiHandler) handlerGetLatestBlock(w http.ResponseWriter, r *http
 	res, err := h.chainSvc.GetLatestBlock(ctx, service.Chain(chain))
 	if err != nil {
 		logger.Errorf("failed to get latest block of chain %s: %v", chain, err)
+		h.Internal(w, r, fmt.Errorf("failed to get latest block of chain %s: %v", chain, err))
+		return
+	}
+	h.Success(w, r, res)
+}
+
+func (h *EnhanceApiHandler) handlerCountTotalTxByChain(w http.ResponseWriter, r *http.Request) {
+	var (
+		ctx, logger = u_logger.GetLogger(r.Context())
+		chain       = chi.URLParam(r, "chain")
+	)
+
+	if chain == "" {
+		logger.Errorf("missing chain")
+		h.BadRequest(w, r, fmt.Errorf("missing chain"))
+		return
+	}
+
+	chainName := service.Chain(chain)
+	switch chainName {
+	case service.ArbitrumNitro,
+		service.Near,
+		service.Klaytn:
+		logger.Errorf("not supported counting tx")
+		h.BadRequest(w, r, fmt.Errorf("not supported counting tx"))
+		return
+	default:
+	}
+
+	res, err := h.chainSvc.CountTotalTxLast24h(ctx, chainName)
+	if err != nil {
+		logger.Errorf("failed to count total tx of chain %s: %v", chain, err)
 		h.Internal(w, r, fmt.Errorf("failed to get latest block of chain %s: %v", chain, err))
 		return
 	}

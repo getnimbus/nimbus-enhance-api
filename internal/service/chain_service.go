@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -11,11 +13,11 @@ import (
 	nearclient "github.com/eteu-technologies/near-api-go/pkg/client"
 	"github.com/eteu-technologies/near-api-go/pkg/client/block"
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/portto/solana-go-sdk/client"
 	solanarpc "github.com/portto/solana-go-sdk/rpc"
+	"github.com/tikivn/ultrago/u_http_client"
 	"github.com/tikivn/ultrago/u_logger"
 	"golang.org/x/sync/errgroup"
 
@@ -35,7 +37,7 @@ const (
 	Polygon       Chain = "polygon"
 	Optimism      Chain = "optimism"
 	ArbitrumNova  Chain = "arbitrum"
-	AvalanceC     Chain = "avalanche-c"
+	Avalance      Chain = "avalanche"
 	ArbitrumNitro Chain = "arbitrum-nitro"
 	Fantom        Chain = "fantom"
 
@@ -96,7 +98,7 @@ var chainInfos = map[Chain]ChainInfo{
 		},
 		IsEVM: true,
 	},
-	AvalanceC: {
+	Avalance: {
 		Endpoint: fmt.Sprintf("https://open-platform.nodereal.io/%s/avalanche-c/ext/bc/C/rpc", NODEREAL_API_KEY),
 		Methods: map[string]string{
 			"getBlockByNumber":      "eth_getBlockByNumber",
@@ -144,27 +146,34 @@ var chainInfos = map[Chain]ChainInfo{
 		Methods: map[string]string{
 			"getBlockByNumber":      "klay_getBlockByNumber",
 			"getTransactionReceipt": "klay_getTransactionReceipt",
+			"getTransactionByHash":  "klay_getTransactionByHash",
 		},
-		IsEVM: false,
+		IsEVM: true,
 	},
 }
 
 func NewChainService(
 	redisClient *infra.RedisClient,
+	httpExecutor u_http_client.HttpExecutor,
 ) ChainService {
 	return &chainService{
-		redisRepo: redis.NewRedisRepo(redisClient, "chain", time.Minute),
+		redisRepo:       redis.NewRedisRepo(redisClient, "chain", time.Minute),
+		httpExecutor:    httpExecutor,
+		chainBaseApiKey: "2MLSf73Pki3sFxxSx3ytr2TFenm", // TODO: add to config later
 	}
 }
 
 type ChainService interface {
 	GetLatestBlock(ctx context.Context, chain Chain) (interface{}, error)
 	SearchTransactionHash(ctx context.Context, hash string) (map[Chain]interface{}, error)
+	CountTotalTxLast24h(ctx context.Context, chain Chain) (int64, error)
 }
 
 type chainService struct {
 	sync.RWMutex
-	redisRepo repo.RedisRepo
+	redisRepo       repo.RedisRepo
+	httpExecutor    u_http_client.HttpExecutor
+	chainBaseApiKey string
 }
 
 func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (interface{}, error) {
@@ -175,9 +184,10 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 	if !ok {
 		return nil, setting.ErrNotSupportedChain
 	}
+	cacheKey := fmt.Sprintf("latest_block:%s", string(chain))
 
 	// get data from cache
-	data, err := svc.redisRepo.Get(ctx, string(chain))
+	data, err := svc.redisRepo.Get(ctx, cacheKey)
 	if err == nil {
 		var res interface{}
 		err = json.Unmarshal([]byte(data), &res)
@@ -199,7 +209,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		} else if err == nil && res == nil {
 			err = ethereum.NotFound
 		}
-		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
 		return res, nil
 	} else if chain == Solana {
 		client := client.NewClient(chainInfo.Endpoint)
@@ -225,7 +235,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		if err != nil {
 			return nil, err
 		}
-		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
 		return res, nil
 	} else if chain == Near {
 		client, err := nearclient.NewClient(chainInfo.Endpoint)
@@ -236,7 +246,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		if err != nil {
 			return nil, err
 		}
-		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
 		return res, nil
 	} else { // default
 		client, cleanup, err := infra.NewRpcClient(ctx, chainInfo.Endpoint)
@@ -252,7 +262,7 @@ func (svc *chainService) GetLatestBlock(ctx context.Context, chain Chain) (inter
 		} else if err == nil && res == nil {
 			err = ethereum.NotFound
 		}
-		_ = svc.redisRepo.Set(ctx, string(chain), res)
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
 		return res, nil
 	}
 }
@@ -262,9 +272,10 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 	if hash == "" {
 		return nil, fmt.Errorf("missing tx hash")
 	}
+	cacheKey := fmt.Sprintf("tx_hash:%s", hash)
 
 	// get data from cache
-	data, err := svc.redisRepo.Get(ctx, hash)
+	data, err := svc.redisRepo.Get(ctx, cacheKey)
 	if err == nil {
 		var res map[Chain]interface{}
 		err = json.Unmarshal([]byte(data), &res)
@@ -295,9 +306,8 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 				defer cleanup()
 
 				var data = struct {
-					Receipt *types.Receipt     `json:"receipt"`
-					Tx      *types.Transaction `json:"tx"`
-					Extra   txExtraInfo        `json:"extra"`
+					Receipt map[string]interface{} `json:"receipt"`
+					Tx      map[string]interface{} `json:"tx"`
 				}{}
 				err = client.CallContext(childCtx, &data.Receipt, chainInfo.Methods["getTransactionReceipt"], hash)
 				if err != nil {
@@ -305,18 +315,19 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 					return nil
 				}
 
-				if data.Receipt != nil {
-					var tx *rpcTransaction
-					err = client.CallContext(childCtx, &tx, chainInfo.Methods["getTransactionByHash"], data.Receipt.TxHash)
+				if data.Receipt == nil {
+					return nil
+				}
+				txHash, ok := data.Receipt["transactionHash"]
+				if ok {
+					var tx map[string]interface{}
+					err = client.CallContext(childCtx, &tx, chainInfo.Methods["getTransactionByHash"], txHash)
 					if err != nil {
 						logger.Errorf("failed to get transaction in chain %v: %v", chain, err)
 						return nil
 					}
 					if tx != nil {
-						data.Tx = tx.tx
-						data.Extra.BlockNumber = tx.BlockNumber
-						data.Extra.BlockHash = tx.BlockHash
-						data.Extra.From = tx.From
+						data.Tx = tx
 					}
 				}
 				if data.Receipt != nil {
@@ -377,9 +388,74 @@ func (svc *chainService) SearchTransactionHash(ctx context.Context, hash string)
 	}
 
 	// cache result into redis
-	_ = svc.redisRepo.Set(ctx, hash, res)
-	_ = svc.redisRepo.Expire(ctx, hash, 30*time.Minute)
+	_ = svc.redisRepo.Set(ctx, cacheKey, res)
+	_ = svc.redisRepo.Expire(ctx, cacheKey, 1*time.Hour)
 	return res, nil
+}
+
+func (svc *chainService) CountTotalTxLast24h(ctx context.Context, chain Chain) (res int64, err error) {
+	ctx, logger := u_logger.GetLogger(ctx)
+	cacheKey := fmt.Sprintf("total_tx:%s", string(chain))
+
+	// get data from cache
+	cacheData, err := svc.redisRepo.Get(ctx, cacheKey)
+	if err == nil {
+		var res int64
+		err = json.Unmarshal([]byte(cacheData), &res)
+		return res, err
+	}
+
+	// if no hit cache then call api
+	headers := map[string]string{
+		"Content-Type": "application/json; charset=utf-8",
+		"X-API-KEY":    svc.chainBaseApiKey,
+	}
+	payload := map[string]interface{}{
+		"query": fmt.Sprintf("select count(*) as total from %s.transactions where block_timestamp >= now() - interval 24 hour;", string(chain)),
+	}
+	client := u_http_client.
+		NewRetryHttpClient(svc.httpExecutor, 60*time.Second, 3).
+		WithUrl("https://api.chainbase.online/v1/dw/query", nil).
+		WithHeaders(headers).
+		WithPayload(payload)
+	resp, err := client.Do(ctx, http.MethodPost)
+	if err != nil {
+		logger.Errorf("failed to get data from api chainbase: %v", err)
+		return 0, err
+	}
+
+	var data = struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			TaskID    string  `json:"task_id"`
+			Rows      int     `json:"rows"`
+			RowsRead  int     `json:"rows_read"`
+			BytesRead int     `json:"bytes_read"`
+			Elapsed   float64 `json:"elapsed"`
+			Meta      []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"meta"`
+			Result []struct {
+				Total string `json:"total"`
+			} `json:"result"`
+			ErrMsg string `json:"err_msg"`
+		} `json:"data"`
+	}{}
+	if err := json.Unmarshal(resp.Payload, &data); err != nil {
+		logger.Errorf("failed to unmarshal response payload: %v", err)
+		return 0, err
+	}
+	if len(data.Data.Result) > 0 {
+		res, err = strconv.ParseInt(data.Data.Result[0].Total, 10, 64)
+	}
+	if err == nil {
+		// cache result into redis
+		_ = svc.redisRepo.Set(ctx, cacheKey, res)
+		_ = svc.redisRepo.Expire(ctx, cacheKey, 5*time.Minute)
+	}
+	return
 }
 
 func (svc *chainService) getChain(chain Chain) (ChainInfo, bool) {
@@ -397,22 +473,4 @@ type JsonError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
-}
-
-type rpcTransaction struct {
-	tx *types.Transaction
-	txExtraInfo
-}
-
-type txExtraInfo struct {
-	BlockNumber *string         `json:"blockNumber,omitempty"`
-	BlockHash   *common.Hash    `json:"blockHash,omitempty"`
-	From        *common.Address `json:"from,omitempty"`
-}
-
-func (tx *rpcTransaction) UnmarshalJSON(msg []byte) error {
-	if err := json.Unmarshal(msg, &tx.tx); err != nil {
-		return err
-	}
-	return json.Unmarshal(msg, &tx.txExtraInfo)
 }
