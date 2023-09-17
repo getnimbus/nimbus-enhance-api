@@ -5,15 +5,13 @@ import (
 
 	"nimbus-enhance-api/internal/api"
 	"nimbus-enhance-api/internal/infra"
-	"nimbus-enhance-api/internal/repo/gorm"
-	"nimbus-enhance-api/internal/repo/gorm_scope"
 	"nimbus-enhance-api/internal/service"
 )
 
 var deps = wire.NewSet(
 	infra.GraphSet,
-	gorm_scope.GraphSet,
-	gorm.GraphSet,
+	//gorm_scope.GraphSet,
+	//gorm.GraphSet,
 	service.GraphSet,
 	api.GraphSet,
 )
