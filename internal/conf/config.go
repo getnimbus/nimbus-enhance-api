@@ -33,6 +33,8 @@ type config struct {
 	// redis
 	RedisAddress string `mapstructure:"REDIS_ADDRESS" default:"localhost:6379"`
 	RedisDB      int    `mapstructure:"REDIS_DB" default:"0"`
+	RedisUser    string `mapstructure:"REDIS_USER" default:"-"`
+	RedisPass    string `mapstructure:"REDIS_PASS" default:"-"`
 }
 
 func (c *config) IsLocal() bool {

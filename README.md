@@ -10,10 +10,10 @@ Build for Nodereal Hackathon
 ```env
 ENV=local
 DEBUG=no
-MIGRATION=no
-GORM_DSN=host=localhost port=5432 user=user password=password dbname=nimbus sslmode=disable TimeZone=UTC
 REDIS_ADDRESS=localhost:6379
 REDIS_DB=0
+REDIS_USER=
+REDIS_PASS=
 ```
 
 3. Run executable file

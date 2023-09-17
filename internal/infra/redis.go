@@ -18,7 +18,8 @@ func NewRedisClient() (*RedisClient, func(), error) {
 	logger := u_logger.NewLogger()
 	c := goredis.NewClient(&goredis.Options{
 		Addr:         conf.Config.RedisAddress,
-		Password:     "",
+		Username:     conf.Config.RedisUser,
+		Password:     conf.Config.RedisPass,
 		DB:           conf.Config.RedisDB,
 		WriteTimeout: time.Second * 60,
 		ReadTimeout:  time.Second * 60,
