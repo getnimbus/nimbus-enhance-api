@@ -179,7 +179,10 @@ func (repo *redisRepo) Close(ctx context.Context) error {
 }
 
 func (repo *redisRepo) redisKey(key string) string {
-	return fmt.Sprintf("nimbus-enhance-api:%s:%s", repo.prefix, key)
+	if repo.prefix != "" {
+		return fmt.Sprintf("%s:%s", repo.prefix, key)
+	}
+	return fmt.Sprintf(key)
 }
 
 func (repo *redisRepo) redisValue(value interface{}) (string, error) {
